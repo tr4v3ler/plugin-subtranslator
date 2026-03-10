@@ -49,6 +49,12 @@ let pollTimer = null;
 let lastErrorNotifyAt = 0;
 let overlayReady = false;
 let pendingTranslation = "";
+let config = {
+  provider: "deepseek",
+  model: PROVIDERS.deepseek.models[0],
+  apiKey: "",
+  baseUrl: PROVIDERS.deepseek.baseUrl
+};
 
 function ensureOverlay() {
   overlay.simpleMode();
@@ -72,7 +78,7 @@ function normalizeText(text) {
   return cleaned.trim();
 }
 
-function getConfig() {
+function refreshConfig() {
   const provider = preferences.get("provider") || "deepseek";
   const model =
     preferences.get("model") ||
@@ -80,7 +86,7 @@ function getConfig() {
     PROVIDERS.deepseek.models[0];
   const apiKey = preferences.get("apiKey") || "";
   const baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS.deepseek.baseUrl;
-  return { provider, model, apiKey, baseUrl };
+  config = { provider, model, apiKey, baseUrl };
 }
 
 function cacheGet(key) {
@@ -121,7 +127,7 @@ async function postJson(url, headers, payload) {
 }
 
 async function translateText(text, context) {
-  const { provider, model, apiKey, baseUrl } = getConfig();
+  const { provider, model, apiKey, baseUrl } = config;
 
   if (!apiKey) {
     if (!missingKeyNotified) {
@@ -236,7 +242,10 @@ function resetState() {
   renderTranslation("");
 }
 
-event.on("iina.file-loaded", resetState);
+event.on("iina.file-loaded", () => {
+  refreshConfig();
+  resetState();
+});
 event.on("iina.file-unloaded", resetState);
 event.on("mpv.sub-text.changed", handleSubtitleChange);
 event.on("mpv.sid.changed", handleSubtitleChange);
@@ -250,6 +259,7 @@ event.on("iina.plugin-overlay-loaded", () => {
 });
 
 event.on("iina.window-loaded", () => {
+  refreshConfig();
   ensureOverlay();
   handleSubtitleChange();
   if (!pollTimer) {

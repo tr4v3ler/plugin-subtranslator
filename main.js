@@ -1,0 +1,223 @@
+const { core, event, http, mpv, overlay, preferences } = iina;
+
+const PROVIDERS = {
+  deepseek: {
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com",
+    models: ["deepseek-chat", "deepseek-reasoner"]
+  },
+  zhipu: {
+    label: "Zhipu AI",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    models: ["glm-5", "glm-4.7"]
+  }
+};
+
+const SYSTEM_PROMPT =
+  "You are a professional subtitle translator. Translate ONLY the current line into Simplified Chinese. " +
+  "Use the previous line as context if provided. Return only the translation text, no extra notes.";
+
+const MAX_CACHE_ENTRIES = 200;
+const overlayStyle = `
+  #subtranslator {
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    bottom: 12%;
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    font-size: 22px;
+    line-height: 1.35;
+    pointer-events: none;
+  }
+`;
+
+let lastOriginal = "";
+let lastContext = "";
+let lastRequestId = 0;
+let cache = new Map();
+let missingKeyNotified = false;
+
+function ensureOverlay() {
+  overlay.simpleMode();
+  overlay.setStyle(overlayStyle);
+}
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function normalizeText(text) {
+  if (!text) return "";
+  let cleaned = text.replace(/\{\\.*?\}/g, "");
+  cleaned = cleaned.replace(/<[^>]+>/g, "");
+  return cleaned.trim();
+}
+
+function hasActiveSubtitle() {
+  try {
+    const sid = mpv.getNative("sid");
+    if (sid === null || sid === undefined) return false;
+    if (sid === "no" || sid === "auto") return false;
+    if (typeof sid === "number" && sid <= 0) return false;
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function getConfig() {
+  const provider = preferences.get("provider") || "deepseek";
+  const model =
+    preferences.get("model") ||
+    PROVIDERS[provider]?.models?.[0] ||
+    PROVIDERS.deepseek.models[0];
+  const apiKey = preferences.get("apiKey") || "";
+  const baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS.deepseek.baseUrl;
+  return { provider, model, apiKey, baseUrl };
+}
+
+function cacheGet(key) {
+  if (!cache.has(key)) return null;
+  const value = cache.get(key);
+  cache.delete(key);
+  cache.set(key, value);
+  return value;
+}
+
+function cacheSet(key, value) {
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    cache.delete(oldestKey);
+  }
+}
+
+async function postJson(url, headers, payload) {
+  if (typeof http.request === "function") {
+    return http.request({
+      method: "POST",
+      url,
+      headers,
+      data: JSON.stringify(payload),
+      timeout: 30000
+    });
+  }
+  if (typeof http.post === "function") {
+    return http.post(url, {
+      headers,
+      data: JSON.stringify(payload),
+      timeout: 30000
+    });
+  }
+  throw new Error("HTTP module does not support POST requests.");
+}
+
+async function translateText(text, context) {
+  const { provider, model, apiKey, baseUrl } = getConfig();
+
+  if (!apiKey) {
+    if (!missingKeyNotified) {
+      core.osd("SubTranslator: Please set API Key in Preferences.");
+      missingKeyNotified = true;
+    }
+    return "";
+  }
+  missingKeyNotified = false;
+
+  const cacheKey = `${provider}|${model}|${text}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content:
+        `Previous line (context): ${context || "(none)"}\n` +
+        `Current line: ${text}\n` +
+        "Return only the Chinese translation of the current line."
+    }
+  ];
+
+  const response = await postJson(`${baseUrl}/chat/completions`, {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json"
+  }, {
+    model,
+    messages,
+    temperature: 1.3
+  });
+
+  const payload = response?.data ?? response?.body ?? response;
+  const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+  const translated = (data?.choices?.[0]?.message?.content || "").trim();
+
+  if (translated) {
+    cacheSet(cacheKey, translated);
+  }
+  return translated;
+}
+
+function renderTranslation(text) {
+  if (!text) {
+    overlay.hide();
+    return;
+  }
+  ensureOverlay();
+  const html = `<div id="subtranslator">${escapeHtml(text).replace(/\n/g, "<br/>")}</div>`;
+  overlay.setContent(html);
+  overlay.show();
+}
+
+async function handleSubtitleChange() {
+  if (!hasActiveSubtitle()) {
+    lastOriginal = "";
+    renderTranslation("");
+    return;
+  }
+
+  const raw = mpv.getString("sub-text") || "";
+  const normalized = normalizeText(raw);
+  if (!normalized) {
+    lastOriginal = "";
+    renderTranslation("");
+    return;
+  }
+
+  if (normalized === lastOriginal) return;
+  lastOriginal = normalized;
+
+  const requestId = ++lastRequestId;
+  const context = lastContext;
+  lastContext = normalized;
+
+  try {
+    const translated = await translateText(normalized, context);
+    if (requestId !== lastRequestId) return;
+    renderTranslation(translated);
+  } catch (error) {
+    if (requestId !== lastRequestId) return;
+    renderTranslation("");
+    core.osd("SubTranslator: Translation failed.");
+  }
+}
+
+function resetState() {
+  lastOriginal = "";
+  lastContext = "";
+  lastRequestId = 0;
+  renderTranslation("");
+}
+
+event.on("iina.file-loaded", resetState);
+event.on("iina.file-unloaded", resetState);
+event.on("mpv.sub-text.changed", handleSubtitleChange);
+event.on("mpv.sid.changed", handleSubtitleChange);

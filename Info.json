@@ -1,0 +1,20 @@
+{
+  "name": "SubTranslator",
+  "identifier": "com.tr4v3ler.subtranslator",
+  "version": "0.1.0",
+  "author": {
+    "name": "tr4v3ler"
+  },
+  "description": "Translate active subtitles to Simplified Chinese and display above originals.",
+  "entry": "main.js",
+  "preferencesPage": "preferences.html",
+  "allowedDomains": [
+    "api.deepseek.com",
+    "open.bigmodel.cn"
+  ],
+  "preferenceDefaults": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "apiKey": ""
+  }
+}

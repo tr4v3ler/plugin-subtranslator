@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SubTranslator Preferences</title>
+    <style>
+      .pref-section {
+        margin-bottom: 12px;
+      }
+      label {
+        display: inline-block;
+        min-width: 120px;
+      }
+      select,
+      input[type="text"],
+      input[type="password"] {
+        width: 280px;
+        max-width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="pref-section">
+      <label for="provider">Provider</label>
+      <select id="provider"></select>
+      <p class="small secondary pref-help">
+        Select the OpenAI-compatible provider for subtitle translation.
+      </p>
+    </div>
+    <div class="pref-section">
+      <label for="model">Model</label>
+      <select id="model"></select>
+      <p class="small secondary pref-help">
+        Choose the model to use for translations.
+      </p>
+    </div>
+    <div class="pref-section">
+      <label for="apiKey">API Key</label>
+      <input id="apiKey" type="password" />
+      <p class="small secondary pref-help">
+        Your key is stored in IINA preferences on this Mac.
+      </p>
+    </div>
+    <script>
+      const PROVIDERS = {
+        deepseek: {
+          label: "DeepSeek",
+          models: ["deepseek-chat", "deepseek-reasoner"]
+        },
+        zhipu: {
+          label: "Zhipu AI",
+          models: ["glm-5", "glm-4.7"]
+        }
+      };
+
+      const { preferences } = window.iina;
+      const providerSelect = document.getElementById("provider");
+      const modelSelect = document.getElementById("model");
+      const apiKeyInput = document.getElementById("apiKey");
+
+      function renderProviders(current) {
+        providerSelect.innerHTML = "";
+        Object.keys(PROVIDERS).forEach((key) => {
+          const option = document.createElement("option");
+          option.value = key;
+          option.textContent = PROVIDERS[key].label;
+          providerSelect.appendChild(option);
+        });
+        providerSelect.value = PROVIDERS[current] ? current : "deepseek";
+      }
+
+      function renderModels(provider, current) {
+        const models = PROVIDERS[provider]?.models || [];
+        modelSelect.innerHTML = "";
+        models.forEach((model) => {
+          const option = document.createElement("option");
+          option.value = model;
+          option.textContent = model;
+          modelSelect.appendChild(option);
+        });
+        if (current && !models.includes(current)) {
+          const option = document.createElement("option");
+          option.value = current;
+          option.textContent = `${current} (custom)`;
+          modelSelect.appendChild(option);
+        }
+        modelSelect.value = current && (models.includes(current) || current) ? current : models[0] || "";
+      }
+
+      preferences.get("provider", (provider) => {
+        const currentProvider = provider || "deepseek";
+        renderProviders(currentProvider);
+        preferences.get("model", (model) => {
+          renderModels(currentProvider, model || "");
+        });
+      });
+
+      preferences.get("apiKey", (apiKey) => {
+        apiKeyInput.value = apiKey || "";
+      });
+
+      providerSelect.addEventListener("change", () => {
+        const provider = providerSelect.value;
+        preferences.set("provider", provider);
+        const defaultModel = PROVIDERS[provider]?.models?.[0] || "";
+        renderModels(provider, defaultModel);
+        if (defaultModel) {
+          preferences.set("model", defaultModel);
+        }
+      });
+
+      modelSelect.addEventListener("change", () => {
+        preferences.set("model", modelSelect.value);
+      });
+
+      apiKeyInput.addEventListener("change", () => {
+        preferences.set("apiKey", apiKeyInput.value.trim());
+      });
+    </script>
+  </body>
+</html>

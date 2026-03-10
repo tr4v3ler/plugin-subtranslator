@@ -21,7 +21,6 @@
     "provider": "deepseek",
     "model": "deepseek-chat",
     "apiKey": "",
-    "debug": false,
-    "fastMode": true
+    "debug": false
   }
 }

@@ -16,9 +16,8 @@ const PROVIDERS = {
 const SYSTEM_PROMPT =
   "Translate the current subtitle line to Simplified Chinese only.";
 
-const FAST_MAX_TOKENS = 64;
-const QUALITY_MAX_TOKENS = 128;
-const FAST_TEMPERATURE = 0.3;
+const MAX_TOKENS = 64;
+const TEMPERATURE = 0.3;
 
 const MAX_CACHE_ENTRIES = 200;
 const overlayStyleBase = `
@@ -53,8 +52,7 @@ let config = {
   model: PROVIDERS.deepseek.models[0],
   apiKey: "",
   baseUrl: PROVIDERS.deepseek.baseUrl,
-  debug: false,
-  fastMode: true
+  debug: false
 };
 let lastDebugAt = 0;
 
@@ -163,16 +161,14 @@ function refreshConfig() {
   const apiKey = preferences.get("apiKey") || "";
   const baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS.deepseek.baseUrl;
   const debug = Boolean(preferences.get("debug"));
-  const fastMode = preferences.get("fastMode");
   config = {
     provider,
     model,
     apiKey,
     baseUrl,
-    debug,
-    fastMode: fastMode === undefined ? true : Boolean(fastMode)
+    debug
   };
-  debugLog(`config provider=${provider} model=${model} key=${apiKey ? "yes" : "no"} fast=${config.fastMode}`);
+  debugLog(`config provider=${provider} model=${model} key=${apiKey ? "yes" : "no"}`);
 }
 
 function cacheGet(key) {
@@ -209,7 +205,7 @@ async function postJson(url, headers, payload) {
 }
 
 async function translateText(text, context) {
-  const { provider, model, apiKey, baseUrl, fastMode } = config;
+  const { provider, model, apiKey, baseUrl } = config;
   if (typeof http === "undefined") {
     debugLog("http module missing");
   }
@@ -236,9 +232,7 @@ async function translateText(text, context) {
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: fastMode
-        ? text
-        : `Prev: ${(context || "(none)").slice(0, 60)}\nNow: ${text}`
+      content: `Prev: ${(context || "(none)").slice(0, 60)}\nNow: ${text}`
     }
   ];
 
@@ -250,9 +244,9 @@ async function translateText(text, context) {
   }, {
     model,
     messages,
-    temperature: fastMode ? FAST_TEMPERATURE : 1.3,
-    max_tokens: fastMode ? FAST_MAX_TOKENS : QUALITY_MAX_TOKENS,
-    top_p: fastMode ? 0.9 : 1.0
+    temperature: TEMPERATURE,
+    max_tokens: MAX_TOKENS,
+    top_p: 0.9
   });
   } catch (error) {
     debugLog(`http post failed: ${String(error)}`);
@@ -337,7 +331,6 @@ async function handleSubtitleChange() {
   if (!normalized) {
     debugLog("normalized empty, skip");
     lastOriginal = "";
-    lastRequestId += 1;
     renderTranslation("");
     return;
   }
@@ -350,7 +343,6 @@ async function handleSubtitleChange() {
   }
   lastOriginal = normalized;
   debugLog(`subtitle changed: ${normalized.slice(0, 60)}`);
-  renderTranslation("");
 
   const requestId = ++lastRequestId;
   const context = lastContext;

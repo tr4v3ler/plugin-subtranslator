@@ -1,4 +1,4 @@
-const { core, event, http, mpv, overlay, preferences } = iina;
+const { core, event, http, mpv, overlay, preferences, console: iinaConsole } = iina;
 
 const PROVIDERS = {
   deepseek: {
@@ -64,8 +64,8 @@ function debugLog(message) {
   if (now - lastDebugAt < 400) return;
   lastDebugAt = now;
   try {
-    if (typeof core.log === "function") {
-      core.log(`[SubTranslator] ${message}`);
+    if (iinaConsole && typeof iinaConsole.log === "function") {
+      iinaConsole.log(`[SubTranslator] ${message}`);
     }
   } catch (error) {
     // ignore

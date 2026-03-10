@@ -8,6 +8,11 @@
   "description": "Translate active subtitles to Simplified Chinese and display above originals.",
   "entry": "main.js",
   "preferencesPage": "preferences.html",
+  "permissions": [
+    "show-osd",
+    "video-overlay",
+    "network-request"
+  ],
   "allowedDomains": [
     "api.deepseek.com",
     "open.bigmodel.cn"

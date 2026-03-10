@@ -14,7 +14,7 @@ const PROVIDERS = {
 };
 
 const SYSTEM_PROMPT =
-  "Translate the current subtitle line to Simplified Chinese. Return only the translation.";
+  "Translate the current subtitle line to Simplified Chinese only.";
 
 const MAX_CACHE_ENTRIES = 200;
 const overlayStyleBase = `
@@ -90,7 +90,7 @@ function parseColor(raw, fallback) {
   return `rgba(${rr}, ${gg}, ${bb}, ${a})`;
 }
 
-function buildOverlayStyle() {
+function buildOverlayStyle(lineCount) {
   const fontFamily = mpv.getString("sub-font") || "sans-serif";
   const fontSize = getMpvNumber("sub-font-size", 22);
   const marginY = getMpvNumber("sub-margin-y", 22);
@@ -103,7 +103,8 @@ function buildOverlayStyle() {
   const shadowColor = parseColor(mpv.getString("sub-shadow-color"), "rgba(0,0,0,0.8)");
   const bold = mpv.getString("sub-bold") === "yes" ? "700" : "400";
   const italic = mpv.getString("sub-italic") === "yes" ? "italic" : "normal";
-  const bottomOffset = marginY + Math.round(fontSize * 1.4);
+  const lines = Math.max(1, lineCount || 1);
+  const bottomOffset = marginY + Math.round(fontSize * 1.4 * lines) + Math.round(fontSize * 0.2);
   const bottom = `calc(${100 - subPos}% + ${bottomOffset}px)`;
   const textShadow = [
     `0 0 ${borderSize}px ${borderColor}`,
@@ -126,9 +127,9 @@ function buildOverlayStyle() {
   `;
 }
 
-function ensureOverlay() {
+function ensureOverlay(lineCount) {
   overlay.simpleMode();
-  overlay.setStyle(buildOverlayStyle());
+  overlay.setStyle(buildOverlayStyle(lineCount));
   overlayReady = true;
   debugLog("overlay ready");
 }
@@ -224,7 +225,7 @@ async function translateText(text, context) {
     {
       role: "user",
       content:
-        `Prev: ${context || "(none)"}\n` +
+        `Prev: ${(context || "(none)").slice(0, 60)}\n` +
         `Now: ${text}\n` +
         "Only return the Chinese translation of the current line."
     }
@@ -239,7 +240,7 @@ async function translateText(text, context) {
     model,
     messages,
     temperature: 1.3,
-    max_tokens: 256
+    max_tokens: 128
   });
   } catch (error) {
     debugLog(`http post failed: ${String(error)}`);
@@ -301,7 +302,7 @@ function renderTranslation(text) {
     lastRenderedText = "";
     return;
   }
-  ensureOverlay();
+  ensureOverlay(1);
   lastRenderedAt = Date.now();
   lastRenderedText = text;
   const html = `<div id="subtranslator">${escapeHtml(text).replace(/\n/g, "<br/>")}</div>`;
@@ -333,6 +334,8 @@ async function handleSubtitleChange() {
     return;
   }
 
+  const lineCount = Math.max(1, normalized.split("\n").length);
+  ensureOverlay(lineCount);
   if (normalized === lastOriginal) {
     debugLog("subtitle unchanged, skip");
     return;
@@ -372,12 +375,12 @@ event.on("mpv.sid.changed", () => {
   debugLog("subtitle track changed");
   lastOriginal = "";
   lastContext = "";
-  ensureOverlay();
+  ensureOverlay(1);
   handleSubtitleChange();
 });
 
 event.on("iina.plugin-overlay-loaded", () => {
-  ensureOverlay();
+  ensureOverlay(1);
   if (pendingTranslation) {
     renderTranslation(pendingTranslation);
     pendingTranslation = "";
@@ -386,7 +389,7 @@ event.on("iina.plugin-overlay-loaded", () => {
 
 event.on("iina.window-loaded", () => {
   refreshConfig();
-  ensureOverlay();
+  ensureOverlay(1);
   handleSubtitleChange();
   if (!pollTimer) {
     pollTimer = setInterval(handleSubtitleChange, 500);

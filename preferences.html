@@ -41,11 +41,18 @@
         Your key is stored in IINA preferences on this Mac.
       </p>
     </div>
+    <div class="pref-section">
+      <label for="debug">Debug</label>
+      <input id="debug" type="checkbox" />
+      <p class="small secondary pref-help">
+        Show verbose on-screen logs for troubleshooting.
+      </p>
+    </div>
     <script>
       const PROVIDERS = {
         deepseek: {
           label: "DeepSeek",
-          models: ["deepseek-chat", "deepseek-reasoner"]
+          models: ["deepseek-chat"]
         },
         zhipu: {
           label: "Zhipu AI",
@@ -57,6 +64,7 @@
       const providerSelect = document.getElementById("provider");
       const modelSelect = document.getElementById("model");
       const apiKeyInput = document.getElementById("apiKey");
+      const debugInput = document.getElementById("debug");
 
       function renderProviders(current) {
         providerSelect.innerHTML = "";
@@ -98,6 +106,9 @@
       preferences.get("apiKey", (apiKey) => {
         apiKeyInput.value = apiKey || "";
       });
+      preferences.get("debug", (debug) => {
+        debugInput.checked = Boolean(debug);
+      });
 
       providerSelect.addEventListener("change", () => {
         const provider = providerSelect.value;
@@ -115,6 +126,10 @@
 
       apiKeyInput.addEventListener("change", () => {
         preferences.set("apiKey", apiKeyInput.value.trim());
+      });
+
+      debugInput.addEventListener("change", () => {
+        preferences.set("debug", debugInput.checked);
       });
     </script>
   </body>

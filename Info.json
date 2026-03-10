@@ -15,6 +15,7 @@
   "preferenceDefaults": {
     "provider": "deepseek",
     "model": "deepseek-chat",
-    "apiKey": ""
+    "apiKey": "",
+    "debug": false
   }
 }

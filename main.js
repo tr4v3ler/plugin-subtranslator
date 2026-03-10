@@ -4,7 +4,7 @@ const PROVIDERS = {
   deepseek: {
     label: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
-    models: ["deepseek-chat", "deepseek-reasoner"]
+    models: ["deepseek-chat"]
   },
   zhipu: {
     label: "Zhipu AI",
@@ -53,13 +53,38 @@ let config = {
   provider: "deepseek",
   model: PROVIDERS.deepseek.models[0],
   apiKey: "",
-  baseUrl: PROVIDERS.deepseek.baseUrl
+  baseUrl: PROVIDERS.deepseek.baseUrl,
+  debug: false
 };
+let lastDebugAt = 0;
+
+function debugLog(message) {
+  if (!config.debug) return;
+  const now = Date.now();
+  if (now - lastDebugAt < 400) return;
+  lastDebugAt = now;
+  try {
+    if (typeof core.log === "function") {
+      core.log(`[SubTranslator] ${message}`);
+    }
+  } catch (error) {
+    // ignore
+  }
+  try {
+    if (typeof console !== "undefined" && console.log) {
+      console.log(`[SubTranslator] ${message}`);
+    }
+  } catch (error) {
+    // ignore
+  }
+  core.osd(`SubTranslator: ${message}`);
+}
 
 function ensureOverlay() {
   overlay.simpleMode();
   overlay.setStyle(overlayStyle);
   overlayReady = true;
+  debugLog("overlay ready");
 }
 
 function escapeHtml(value) {
@@ -86,7 +111,9 @@ function refreshConfig() {
     PROVIDERS.deepseek.models[0];
   const apiKey = preferences.get("apiKey") || "";
   const baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS.deepseek.baseUrl;
-  config = { provider, model, apiKey, baseUrl };
+  const debug = Boolean(preferences.get("debug"));
+  config = { provider, model, apiKey, baseUrl, debug };
+  debugLog(`config provider=${provider} model=${model} key=${apiKey ? "yes" : "no"}`);
 }
 
 function cacheGet(key) {
@@ -134,6 +161,7 @@ async function translateText(text, context) {
       core.osd("SubTranslator: Please set API Key in Preferences.");
       missingKeyNotified = true;
     }
+    debugLog("missing api key");
     return "";
   }
   missingKeyNotified = false;
@@ -141,6 +169,7 @@ async function translateText(text, context) {
   const cacheKey = `${provider}|${model}|${text}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
+  debugLog(`translate request (${provider}/${model})`);
 
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -169,6 +198,7 @@ async function translateText(text, context) {
       core.osd(`SubTranslator: HTTP ${status}`);
       lastErrorNotifyAt = now;
     }
+    debugLog(`http status ${status}`);
     return "";
   }
 
@@ -180,9 +210,11 @@ async function translateText(text, context) {
       core.osd(`SubTranslator: ${data.error.message}`);
       lastErrorNotifyAt = now;
     }
+    debugLog(`api error ${data.error.message}`);
     return "";
   }
   const translated = (data?.choices?.[0]?.message?.content || "").trim();
+  debugLog(`translate ok length=${translated.length}`);
 
   if (translated) {
     cacheSet(cacheKey, translated);
@@ -193,6 +225,7 @@ async function translateText(text, context) {
 function renderTranslation(text) {
   if (!overlayReady) {
     pendingTranslation = text || "";
+    debugLog("overlay not ready, queue render");
     return;
   }
   if (!text) {
@@ -210,6 +243,9 @@ async function handleSubtitleChange() {
     mpv.getString("sub-text") ||
     mpv.getString("sub-text-ass") ||
     "";
+  if (raw) {
+    debugLog(`raw subtitle len=${raw.length}`);
+  }
   const normalized = normalizeText(raw);
   if (!normalized) {
     lastOriginal = "";
@@ -219,6 +255,7 @@ async function handleSubtitleChange() {
 
   if (normalized === lastOriginal) return;
   lastOriginal = normalized;
+  debugLog(`subtitle changed: ${normalized.slice(0, 60)}`);
 
   const requestId = ++lastRequestId;
   const context = lastContext;
@@ -232,6 +269,7 @@ async function handleSubtitleChange() {
     if (requestId !== lastRequestId) return;
     renderTranslation("");
     core.osd("SubTranslator: Translation failed.");
+    debugLog(`translate exception ${error?.message || "unknown"}`);
   }
 }
 
@@ -248,7 +286,12 @@ event.on("iina.file-loaded", () => {
 });
 event.on("iina.file-unloaded", resetState);
 event.on("mpv.sub-text.changed", handleSubtitleChange);
-event.on("mpv.sid.changed", handleSubtitleChange);
+event.on("mpv.sid.changed", () => {
+  debugLog("subtitle track changed");
+  lastOriginal = "";
+  lastContext = "";
+  handleSubtitleChange();
+});
 
 event.on("iina.plugin-overlay-loaded", () => {
   ensureOverlay();

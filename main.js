@@ -19,6 +19,13 @@ const SYSTEM_PROMPT =
 
 const MAX_CACHE_ENTRIES = 200;
 const overlayStyle = `
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
   #subtranslator {
     position: absolute;
     left: 6%;
@@ -38,6 +45,8 @@ let lastContext = "";
 let lastRequestId = 0;
 let cache = new Map();
 let missingKeyNotified = false;
+let pollTimer = null;
+let lastErrorNotifyAt = 0;
 
 function ensureOverlay() {
   overlay.simpleMode();
@@ -58,18 +67,6 @@ function normalizeText(text) {
   let cleaned = text.replace(/\{\\.*?\}/g, "");
   cleaned = cleaned.replace(/<[^>]+>/g, "");
   return cleaned.trim();
-}
-
-function hasActiveSubtitle() {
-  try {
-    const sid = mpv.getNative("sid");
-    if (sid === null || sid === undefined) return false;
-    if (sid === "no" || sid === "auto") return false;
-    if (typeof sid === "number" && sid <= 0) return false;
-    return true;
-  } catch (error) {
-    return false;
-  }
 }
 
 function getConfig() {
@@ -156,8 +153,26 @@ async function translateText(text, context) {
     temperature: 1.3
   });
 
+  const status = response?.status ?? response?.statusCode;
+  if (status && status >= 400) {
+    const now = Date.now();
+    if (now - lastErrorNotifyAt > 8000) {
+      core.osd(`SubTranslator: HTTP ${status}`);
+      lastErrorNotifyAt = now;
+    }
+    return "";
+  }
+
   const payload = response?.data ?? response?.body ?? response;
   const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+  if (data?.error?.message) {
+    const now = Date.now();
+    if (now - lastErrorNotifyAt > 8000) {
+      core.osd(`SubTranslator: ${data.error.message}`);
+      lastErrorNotifyAt = now;
+    }
+    return "";
+  }
   const translated = (data?.choices?.[0]?.message?.content || "").trim();
 
   if (translated) {
@@ -178,12 +193,6 @@ function renderTranslation(text) {
 }
 
 async function handleSubtitleChange() {
-  if (!hasActiveSubtitle()) {
-    lastOriginal = "";
-    renderTranslation("");
-    return;
-  }
-
   const raw = mpv.getString("sub-text") || "";
   const normalized = normalizeText(raw);
   if (!normalized) {
@@ -221,3 +230,7 @@ event.on("iina.file-loaded", resetState);
 event.on("iina.file-unloaded", resetState);
 event.on("mpv.sub-text.changed", handleSubtitleChange);
 event.on("mpv.sid.changed", handleSubtitleChange);
+
+if (!pollTimer) {
+  pollTimer = setInterval(handleSubtitleChange, 500);
+}

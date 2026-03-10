@@ -49,6 +49,9 @@ let pollTimer = null;
 let lastErrorNotifyAt = 0;
 let overlayReady = false;
 let pendingTranslation = "";
+let lastRenderedAt = 0;
+let lastRenderedText = "";
+const HIDE_GRACE_MS = 1500;
 let config = {
   provider: "deepseek",
   model: PROVIDERS.deepseek.models[0],
@@ -248,12 +251,16 @@ function renderTranslation(text) {
   }
   if (!text) {
     overlay.hide();
+    lastRenderedText = "";
     return;
   }
   ensureOverlay();
+  lastRenderedAt = Date.now();
+  lastRenderedText = text;
   const html = `<div id="subtranslator">${escapeHtml(text).replace(/\n/g, "<br/>")}</div>`;
   overlay.setContent(html);
   overlay.show();
+  debugLog(`render ok len=${text.length} snippet="${text.slice(0, 40)}"`);
 }
 
 async function handleSubtitleChange() {
@@ -270,7 +277,12 @@ async function handleSubtitleChange() {
   if (!normalized) {
     debugLog("normalized empty, skip");
     lastOriginal = "";
-    renderTranslation("");
+    const since = Date.now() - lastRenderedAt;
+    if (lastRenderedText && since < HIDE_GRACE_MS) {
+      debugLog(`keep overlay (grace ${since}ms)`);
+    } else {
+      renderTranslation("");
+    }
     return;
   }
 

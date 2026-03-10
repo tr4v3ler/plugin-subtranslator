@@ -47,10 +47,13 @@ let cache = new Map();
 let missingKeyNotified = false;
 let pollTimer = null;
 let lastErrorNotifyAt = 0;
+let overlayReady = false;
+let pendingTranslation = "";
 
 function ensureOverlay() {
   overlay.simpleMode();
   overlay.setStyle(overlayStyle);
+  overlayReady = true;
 }
 
 function escapeHtml(value) {
@@ -182,6 +185,10 @@ async function translateText(text, context) {
 }
 
 function renderTranslation(text) {
+  if (!overlayReady) {
+    pendingTranslation = text || "";
+    return;
+  }
   if (!text) {
     overlay.hide();
     return;
@@ -193,7 +200,10 @@ function renderTranslation(text) {
 }
 
 async function handleSubtitleChange() {
-  const raw = mpv.getString("sub-text") || "";
+  const raw =
+    mpv.getString("sub-text") ||
+    mpv.getString("sub-text-ass") ||
+    "";
   const normalized = normalizeText(raw);
   if (!normalized) {
     lastOriginal = "";
@@ -231,6 +241,18 @@ event.on("iina.file-unloaded", resetState);
 event.on("mpv.sub-text.changed", handleSubtitleChange);
 event.on("mpv.sid.changed", handleSubtitleChange);
 
-if (!pollTimer) {
-  pollTimer = setInterval(handleSubtitleChange, 500);
-}
+event.on("iina.plugin-overlay-loaded", () => {
+  ensureOverlay();
+  if (pendingTranslation) {
+    renderTranslation(pendingTranslation);
+    pendingTranslation = "";
+  }
+});
+
+event.on("iina.window-loaded", () => {
+  ensureOverlay();
+  handleSubtitleChange();
+  if (!pollTimer) {
+    pollTimer = setInterval(handleSubtitleChange, 500);
+  }
+});

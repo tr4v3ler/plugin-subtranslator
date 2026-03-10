@@ -132,29 +132,11 @@ function cacheSet(key, value) {
 
 async function postJson(url, headers, payload) {
   debugLog(`http post ${url}`);
-  const body = JSON.stringify(payload);
-  if (typeof http.request === "function") {
-    try {
-      return http.request({
-        method: "POST",
-        url,
-        headers,
-        body,
-        data: body,
-        timeout: 30000
-      });
-    } catch (error) {
-      debugLog(`http exception ${String(error)}`);
-      throw error;
-    }
-  }
   if (typeof http.post === "function") {
     try {
       return http.post(url, {
         headers,
-        body,
-        data: body,
-        timeout: 30000
+        data: payload
       });
     } catch (error) {
       debugLog(`http exception ${String(error)}`);
@@ -218,8 +200,8 @@ async function translateText(text, context) {
     debugLog("http response empty");
     return "";
   }
-  const status = response?.status ?? response?.statusCode;
-  debugLog(`http response status=${status ?? "n/a"}`);
+  const status = response?.statusCode ?? response?.status;
+  debugLog(`http response status=${status ?? "n/a"} reason=${response?.reason || ""}`);
   if (status && status >= 400) {
     const now = Date.now();
     if (now - lastErrorNotifyAt > 8000) {
@@ -229,7 +211,7 @@ async function translateText(text, context) {
     return "";
   }
 
-  const payload = response?.data ?? response?.body ?? response;
+  const payload = response?.data ?? response?.text ?? response;
   debugLog(`http payload type=${typeof payload}`);
   let data = payload;
   if (typeof payload === "string") {

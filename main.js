@@ -16,6 +16,10 @@ const PROVIDERS = {
 const SYSTEM_PROMPT =
   "Translate the current subtitle line to Simplified Chinese only.";
 
+const FAST_MAX_TOKENS = 64;
+const QUALITY_MAX_TOKENS = 128;
+const FAST_TEMPERATURE = 0.3;
+
 const MAX_CACHE_ENTRIES = 200;
 const overlayStyleBase = `
   html, body {
@@ -246,8 +250,9 @@ async function translateText(text, context) {
   }, {
     model,
     messages,
-    temperature: 1.3,
-    max_tokens: fastMode ? 96 : 128
+    temperature: fastMode ? FAST_TEMPERATURE : 1.3,
+    max_tokens: fastMode ? FAST_MAX_TOKENS : QUALITY_MAX_TOKENS,
+    top_p: fastMode ? 0.9 : 1.0
   });
   } catch (error) {
     debugLog(`http post failed: ${String(error)}`);

@@ -235,7 +235,7 @@ async function translateText(text, context) {
     return "";
   }
   const translated = (data?.choices?.[0]?.message?.content || "").trim();
-  debugLog(`translate ok length=${translated.length}`);
+  debugLog(`translate ok length=${translated.length} text="${translated.slice(0, 120)}"`);
 
   if (translated) {
     cacheSet(cacheKey, translated);

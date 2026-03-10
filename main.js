@@ -14,11 +14,10 @@ const PROVIDERS = {
 };
 
 const SYSTEM_PROMPT =
-  "You are a professional subtitle translator. Translate ONLY the current line into Simplified Chinese. " +
-  "Use the previous line as context if provided. Return only the translation text, no extra notes.";
+  "Translate the current subtitle line to Simplified Chinese. Return only the translation.";
 
 const MAX_CACHE_ENTRIES = 200;
-const overlayStyle = `
+const overlayStyleBase = `
   html, body {
     margin: 0;
     padding: 0;
@@ -30,12 +29,6 @@ const overlayStyle = `
     position: absolute;
     left: 6%;
     right: 6%;
-    bottom: 12%;
-    text-align: center;
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-    font-size: 22px;
-    line-height: 1.35;
     pointer-events: none;
   }
 `;
@@ -80,9 +73,62 @@ function debugLog(message) {
   }
 }
 
+function getMpvNumber(name, fallback) {
+  const raw = mpv.getString(name);
+  const num = parseFloat(raw);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function parseColor(raw, fallback) {
+  if (!raw || typeof raw !== "string") return fallback;
+  const parts = raw.split("/").map((v) => parseFloat(v));
+  if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) return fallback;
+  const [r, g, b, a] = parts;
+  const rr = Math.round(r * 255);
+  const gg = Math.round(g * 255);
+  const bb = Math.round(b * 255);
+  return `rgba(${rr}, ${gg}, ${bb}, ${a})`;
+}
+
+function buildOverlayStyle() {
+  const fontFamily = mpv.getString("sub-font") || "sans-serif";
+  const fontSize = getMpvNumber("sub-font-size", 22);
+  const marginY = getMpvNumber("sub-margin-y", 22);
+  const subPos = getMpvNumber("sub-pos", 100);
+  const alignX = mpv.getString("sub-align-x") || "center";
+  const color = parseColor(mpv.getString("sub-color"), "rgba(255,255,255,1)");
+  const borderSize = getMpvNumber("sub-border-size", 2);
+  const borderColor = parseColor(mpv.getString("sub-border-color"), "rgba(0,0,0,1)");
+  const shadowOffset = getMpvNumber("sub-shadow-offset", 0);
+  const shadowColor = parseColor(mpv.getString("sub-shadow-color"), "rgba(0,0,0,0.8)");
+  const bold = mpv.getString("sub-bold") === "yes" ? "700" : "400";
+  const italic = mpv.getString("sub-italic") === "yes" ? "italic" : "normal";
+  const bottomOffset = marginY + Math.round(fontSize * 1.4);
+  const bottom = `calc(${100 - subPos}% + ${bottomOffset}px)`;
+  const textShadow = [
+    `0 0 ${borderSize}px ${borderColor}`,
+    `${shadowOffset}px ${shadowOffset}px ${Math.max(1, borderSize)}px ${shadowColor}`
+  ].join(", ");
+
+  return `
+    ${overlayStyleBase}
+    #subtranslator {
+      bottom: ${bottom};
+      text-align: ${alignX};
+      color: ${color};
+      font-family: ${fontFamily};
+      font-size: ${fontSize}px;
+      line-height: 1.35;
+      font-weight: ${bold};
+      font-style: ${italic};
+      text-shadow: ${textShadow};
+    }
+  `;
+}
+
 function ensureOverlay() {
   overlay.simpleMode();
-  overlay.setStyle(overlayStyle);
+  overlay.setStyle(buildOverlayStyle());
   overlayReady = true;
   debugLog("overlay ready");
 }
@@ -178,9 +224,9 @@ async function translateText(text, context) {
     {
       role: "user",
       content:
-        `Previous line (context): ${context || "(none)"}\n` +
-        `Current line: ${text}\n` +
-        "Return only the Chinese translation of the current line."
+        `Prev: ${context || "(none)"}\n` +
+        `Now: ${text}\n` +
+        "Only return the Chinese translation of the current line."
     }
   ];
 
@@ -189,11 +235,12 @@ async function translateText(text, context) {
     response = await postJson(`${baseUrl}/chat/completions`, {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
-    }, {
-      model,
-      messages,
-      temperature: 1.3
-    });
+  }, {
+    model,
+    messages,
+    temperature: 1.3,
+    max_tokens: 256
+  });
   } catch (error) {
     debugLog(`http post failed: ${String(error)}`);
     return "";
@@ -325,6 +372,7 @@ event.on("mpv.sid.changed", () => {
   debugLog("subtitle track changed");
   lastOriginal = "";
   lastContext = "";
+  ensureOverlay();
   handleSubtitleChange();
 });
 

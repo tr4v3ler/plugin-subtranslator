@@ -60,9 +60,7 @@ let lastDebugAt = 0;
 
 function debugLog(message) {
   if (!config.debug) return;
-  const now = Date.now();
-  if (now - lastDebugAt < 400) return;
-  lastDebugAt = now;
+  lastDebugAt = Date.now();
   try {
     if (iinaConsole && typeof iinaConsole.log === "function") {
       iinaConsole.log(`[SubTranslator] ${message}`);
@@ -133,6 +131,7 @@ function cacheSet(key, value) {
 }
 
 async function postJson(url, headers, payload) {
+  debugLog(`http post ${url}`);
   if (typeof http.request === "function") {
     return http.request({
       method: "POST",
@@ -166,8 +165,11 @@ async function translateText(text, context) {
 
   const cacheKey = `${provider}|${model}|${text}`;
   const cached = cacheGet(cacheKey);
-  if (cached) return cached;
-  debugLog(`translate request (${provider}/${model})`);
+  if (cached) {
+    debugLog("translate cache hit");
+    return cached;
+  }
+  debugLog(`translate request (${provider}/${model}) len=${text.length}`);
 
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -239,17 +241,20 @@ async function handleSubtitleChange() {
     mpv.getString("sub-text") ||
     mpv.getString("sub-text-ass") ||
     "";
-  if (raw) {
-    debugLog(`raw subtitle len=${raw.length}`);
-  }
+  debugLog(`raw subtitle len=${raw.length} snippet="${raw.slice(0, 80)}"`);
   const normalized = normalizeText(raw);
+  debugLog(`normalized len=${normalized.length} snippet="${normalized.slice(0, 80)}"`);
   if (!normalized) {
+    debugLog("normalized empty, skip");
     lastOriginal = "";
     renderTranslation("");
     return;
   }
 
-  if (normalized === lastOriginal) return;
+  if (normalized === lastOriginal) {
+    debugLog("subtitle unchanged, skip");
+    return;
+  }
   lastOriginal = normalized;
   debugLog(`subtitle changed: ${normalized.slice(0, 60)}`);
 

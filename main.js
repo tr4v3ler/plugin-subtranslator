@@ -132,21 +132,34 @@ function cacheSet(key, value) {
 
 async function postJson(url, headers, payload) {
   debugLog(`http post ${url}`);
+  const body = JSON.stringify(payload);
   if (typeof http.request === "function") {
-    return http.request({
-      method: "POST",
-      url,
-      headers,
-      data: JSON.stringify(payload),
-      timeout: 30000
-    });
+    try {
+      return http.request({
+        method: "POST",
+        url,
+        headers,
+        body,
+        data: body,
+        timeout: 30000
+      });
+    } catch (error) {
+      debugLog(`http exception ${String(error)}`);
+      throw error;
+    }
   }
   if (typeof http.post === "function") {
-    return http.post(url, {
-      headers,
-      data: JSON.stringify(payload),
-      timeout: 30000
-    });
+    try {
+      return http.post(url, {
+        headers,
+        body,
+        data: body,
+        timeout: 30000
+      });
+    } catch (error) {
+      debugLog(`http exception ${String(error)}`);
+      throw error;
+    }
   }
   throw new Error("HTTP module does not support POST requests.");
 }
@@ -191,7 +204,12 @@ async function translateText(text, context) {
     temperature: 1.3
   });
 
+  if (!response) {
+    debugLog("http response empty");
+    return "";
+  }
   const status = response?.status ?? response?.statusCode;
+  debugLog(`http response status=${status ?? "n/a"}`);
   if (status && status >= 400) {
     const now = Date.now();
     if (now - lastErrorNotifyAt > 8000) {

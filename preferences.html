@@ -48,6 +48,13 @@
         Show verbose on-screen logs for troubleshooting.
       </p>
     </div>
+    <div class="pref-section">
+      <label for="fastMode">Fast Mode</label>
+      <input id="fastMode" type="checkbox" />
+      <p class="small secondary pref-help">
+        Reduce latency by shortening prompts and disabling context.
+      </p>
+    </div>
     <script>
       const PROVIDERS = {
         deepseek: {
@@ -65,6 +72,7 @@
       const modelSelect = document.getElementById("model");
       const apiKeyInput = document.getElementById("apiKey");
       const debugInput = document.getElementById("debug");
+      const fastModeInput = document.getElementById("fastMode");
 
       function renderProviders(current) {
         providerSelect.innerHTML = "";
@@ -109,6 +117,9 @@
       preferences.get("debug", (debug) => {
         debugInput.checked = Boolean(debug);
       });
+      preferences.get("fastMode", (fastMode) => {
+        fastModeInput.checked = fastMode === undefined ? true : Boolean(fastMode);
+      });
 
       providerSelect.addEventListener("change", () => {
         const provider = providerSelect.value;
@@ -130,6 +141,10 @@
 
       debugInput.addEventListener("change", () => {
         preferences.set("debug", debugInput.checked);
+      });
+
+      fastModeInput.addEventListener("change", () => {
+        preferences.set("fastMode", fastModeInput.checked);
       });
     </script>
   </body>

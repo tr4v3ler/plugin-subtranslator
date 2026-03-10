@@ -44,13 +44,13 @@ let overlayReady = false;
 let pendingTranslation = "";
 let lastRenderedAt = 0;
 let lastRenderedText = "";
-const HIDE_GRACE_MS = 1500;
 let config = {
   provider: "deepseek",
   model: PROVIDERS.deepseek.models[0],
   apiKey: "",
   baseUrl: PROVIDERS.deepseek.baseUrl,
-  debug: false
+  debug: false,
+  fastMode: true
 };
 let lastDebugAt = 0;
 
@@ -159,8 +159,16 @@ function refreshConfig() {
   const apiKey = preferences.get("apiKey") || "";
   const baseUrl = PROVIDERS[provider]?.baseUrl || PROVIDERS.deepseek.baseUrl;
   const debug = Boolean(preferences.get("debug"));
-  config = { provider, model, apiKey, baseUrl, debug };
-  debugLog(`config provider=${provider} model=${model} key=${apiKey ? "yes" : "no"}`);
+  const fastMode = preferences.get("fastMode");
+  config = {
+    provider,
+    model,
+    apiKey,
+    baseUrl,
+    debug,
+    fastMode: fastMode === undefined ? true : Boolean(fastMode)
+  };
+  debugLog(`config provider=${provider} model=${model} key=${apiKey ? "yes" : "no"} fast=${config.fastMode}`);
 }
 
 function cacheGet(key) {
@@ -197,7 +205,7 @@ async function postJson(url, headers, payload) {
 }
 
 async function translateText(text, context) {
-  const { provider, model, apiKey, baseUrl } = config;
+  const { provider, model, apiKey, baseUrl, fastMode } = config;
   if (typeof http === "undefined") {
     debugLog("http module missing");
   }
@@ -224,10 +232,9 @@ async function translateText(text, context) {
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content:
-        `Prev: ${(context || "(none)").slice(0, 60)}\n` +
-        `Now: ${text}\n` +
-        "Only return the Chinese translation of the current line."
+      content: fastMode
+        ? text
+        : `Prev: ${(context || "(none)").slice(0, 60)}\nNow: ${text}`
     }
   ];
 
@@ -240,7 +247,7 @@ async function translateText(text, context) {
     model,
     messages,
     temperature: 1.3,
-    max_tokens: 128
+    max_tokens: fastMode ? 96 : 128
   });
   } catch (error) {
     debugLog(`http post failed: ${String(error)}`);
@@ -325,12 +332,8 @@ async function handleSubtitleChange() {
   if (!normalized) {
     debugLog("normalized empty, skip");
     lastOriginal = "";
-    const since = Date.now() - lastRenderedAt;
-    if (lastRenderedText && since < HIDE_GRACE_MS) {
-      debugLog(`keep overlay (grace ${since}ms)`);
-    } else {
-      renderTranslation("");
-    }
+    lastRequestId += 1;
+    renderTranslation("");
     return;
   }
 
@@ -342,6 +345,7 @@ async function handleSubtitleChange() {
   }
   lastOriginal = normalized;
   debugLog(`subtitle changed: ${normalized.slice(0, 60)}`);
+  renderTranslation("");
 
   const requestId = ++lastRequestId;
   const context = lastContext;

@@ -166,6 +166,10 @@ async function postJson(url, headers, payload) {
 
 async function translateText(text, context) {
   const { provider, model, apiKey, baseUrl } = config;
+  if (typeof http === "undefined") {
+    debugLog("http module missing");
+  }
+  debugLog(`http type request=${typeof http.request} post=${typeof http.post}`);
 
   if (!apiKey) {
     if (!missingKeyNotified) {
@@ -255,6 +259,9 @@ function renderTranslation(text) {
 }
 
 async function handleSubtitleChange() {
+  if (lastRequestId > 0 && lastRequestId % 5 === 0) {
+    debugLog(`memory cache size=${cache.size}`);
+  }
   const raw =
     mpv.getString("sub-text") ||
     mpv.getString("sub-text-ass") ||

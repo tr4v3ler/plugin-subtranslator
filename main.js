@@ -77,7 +77,6 @@ function debugLog(message) {
   } catch (error) {
     // ignore
   }
-  core.osd(`SubTranslator: ${message}`);
 }
 
 function ensureOverlay() {
@@ -158,10 +157,9 @@ async function translateText(text, context) {
 
   if (!apiKey) {
     if (!missingKeyNotified) {
-      core.osd("SubTranslator: Please set API Key in Preferences.");
+      debugLog("missing api key");
       missingKeyNotified = true;
     }
-    debugLog("missing api key");
     return "";
   }
   missingKeyNotified = false;
@@ -195,7 +193,6 @@ async function translateText(text, context) {
   if (status && status >= 400) {
     const now = Date.now();
     if (now - lastErrorNotifyAt > 8000) {
-      core.osd(`SubTranslator: HTTP ${status}`);
       lastErrorNotifyAt = now;
     }
     debugLog(`http status ${status}`);
@@ -207,7 +204,6 @@ async function translateText(text, context) {
   if (data?.error?.message) {
     const now = Date.now();
     if (now - lastErrorNotifyAt > 8000) {
-      core.osd(`SubTranslator: ${data.error.message}`);
       lastErrorNotifyAt = now;
     }
     debugLog(`api error ${data.error.message}`);
@@ -268,7 +264,6 @@ async function handleSubtitleChange() {
   } catch (error) {
     if (requestId !== lastRequestId) return;
     renderTranslation("");
-    core.osd("SubTranslator: Translation failed.");
     debugLog(`translate exception ${error?.message || "unknown"}`);
   }
 }

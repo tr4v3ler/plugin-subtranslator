@@ -199,14 +199,20 @@ async function translateText(text, context) {
     }
   ];
 
-  const response = await postJson(`${baseUrl}/chat/completions`, {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  }, {
-    model,
-    messages,
-    temperature: 1.3
-  });
+  let response;
+  try {
+    response = await postJson(`${baseUrl}/chat/completions`, {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    }, {
+      model,
+      messages,
+      temperature: 1.3
+    });
+  } catch (error) {
+    debugLog(`http post failed: ${String(error)}`);
+    return "";
+  }
 
   if (!response) {
     debugLog("http response empty");
@@ -224,7 +230,17 @@ async function translateText(text, context) {
   }
 
   const payload = response?.data ?? response?.body ?? response;
-  const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+  debugLog(`http payload type=${typeof payload}`);
+  let data = payload;
+  if (typeof payload === "string") {
+    debugLog(`http payload length=${payload.length}`);
+    try {
+      data = JSON.parse(payload);
+    } catch (error) {
+      debugLog(`json parse error: ${String(error)}`);
+      return "";
+    }
+  }
   if (data?.error?.message) {
     const now = Date.now();
     if (now - lastErrorNotifyAt > 8000) {
@@ -294,7 +310,7 @@ async function handleSubtitleChange() {
   } catch (error) {
     if (requestId !== lastRequestId) return;
     renderTranslation("");
-    debugLog(`translate exception ${error?.message || "unknown"}`);
+    debugLog(`translate exception ${String(error)}`);
   }
 }
 
